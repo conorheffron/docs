@@ -6,11 +6,22 @@ author: Glenn Wright
 ---
 # Reference architecture for Google Cloud
 
-
-
-
 Kdb+ is the technology of choice for many of the world’s top financial institutions when implementing a tick-capture system. Kdb+ is capable of processing large amounts of data in a very short space of time, making it the ideal technology for dealing with the ever-increasing volumes of financial tick data.
 
+Kx clients can lift and shift their kdb+ plants to the cloud and leverage virtual machines (VM) with storage. This is the classic approach that relies on the existing licence. To benefit more from the cloud technology it is recommended to migrate to KX Insights. 
+
+Kx Insights provides a range of tools to build, manage and deploy kdb+ applications in the cloud. It supports interfaces for deployment and common &quot;Devops&quot; orchestration tools such as Docker, Kubernetes, Helm, etc. It supports integrations with major cloud logging services. It provides a kdb+ native REST client, Kurl, to authenticate and interface with other cloud services. Kx Insights also provides kdb+ native support for reading from S3 object storage, and a packaging utility, QPacker to build and deploy kdb+ applications to the cloud. By taking advantage of Kx Insights suite of tools, developers can quickly and easily create new and integrate existing kdb+ applications on AWS.
+
+Deployment
+-   Qpacker - A packaging utility that supports q, python and c libraries.
+-   Detailed guide to using Helm and Kubernetes to deploy kdb+ applications to the cloud.
+
+Service Integration
+-   Qlog - Integrations with major cloud logging services
+-   Kurl - Native kdb+ REST client with authentication to cloud services.
+
+Storage
+-   Kdb+ Object Store - Native support for reading and querying S3 object storage.
 
 ## Architectural components
 
@@ -119,6 +130,12 @@ The historical database (HDB) is a simple kdb+ process with a pointer to the per
 
 HDB data is partitioned by date in the standard kdb+tick. If multiple disks are attached to the box, then data can be segmented, and kdb+ makes use of parallel I/O operations. Segmented HDB requires a `par.txt` file that identifies the locations of the individual segments.
 
+The HDB segment locations can be on AWS S3 object storage by using the Kx Insights native object store functionality. In this pattern, the HDB can reside entirely on S3 storage or spread across EBS, EFS or S3 as required. There is a relatively high latency when using S3 cloud storage compared to local storage, such as EBS. The performance of kdb+ when working with S3 can be improved by taking advantage of the caching feature of the kdb+ native object store. The results of requests to S3 can be cached on a local high-performance disk thus increasing performance. The cache directory is continuously monitored and a size limit is maintained by deleting files according to a LRU (least recently used) algorithm. 
+
+Caching coupled with enabling secondary threads can increase the performance of queries against a HDB on S3 storage. The larger the number of secondary threads, irrespective of CPU core count, the better the performance of kdb+ object storage. Conversely the performance of cached data appears to be better if the secondary-thread count matches the CPU core count. 
+
+It is recommended to use compression on the HDB data residing on S3. This can reduce the cost of object storage and possible egress costs and also counteract the relatively high-latency and low bandwidth associated with S3 object storage.
+
 An HDB query is processed by multiple threads and map-reduce is applied if multiple partitions are involved in the query.
 
 Purpose:
@@ -183,6 +200,8 @@ There are many solutions that offer full operational functionality for the POSIX
 ### Google Cloud Storage
 
 [Google Cloud Storage](https://cloud.google.com/storage) (GCS) is an object store that scales to exabytes of data. There are different storage classes (standard, nearline, cold line, archive) for different availability. Infrequently used data can use cheaper but slower storage. The cloud storage interface supports PUT, GET, LIST, HEAD operations only so it cannot be used for its historical database (HDB) directly, and constitutes ‘eventual consistency’: and RESTful interfaces. There is an open-source adapter (e.g. [Cloud Storage FUSE](https://cloud.google.com/storage/docs/gcs-fuse)) which allows mounting a Cloud Storage bucket as a file system.
+
+The Kx Insights native object store functionality allows users to read HDB data from S3 object storage. Cloud object storage such as S3 is slow relative to local storage such as EBS. However, the performance of kdb+ when working with S3 can be improved by caching S3 data. Each query to S3 has a financial cost and caching the resulting data can help to reduce this cost. Caching coupled with enabling secondary threads can significantly increase the performance of queries against a HDB on S3 storage.
 
 GCS is great for archive, tiering, and backup purposes. The TP log file and the sym should be stored each day and archived for a period of time. The lifecycle management of the object store simplifies clean-up whereby one can set expiration time to any file. The [versioning feature](https://cloud.google.com/storage/docs/object-versioning) of GCS is particularly useful when a sym file bloat happens due to feed misconfiguration or upstream change. Migrating back to a previous version saves the health of the whole database.
 
@@ -385,6 +404,23 @@ Key benefits of Cloud Logging:
 
 -   Cloud Logging integrates with [Cloud Monitoring](https://cloud.google.com/monitoring). You may also wish to integrate your [KX Monitoring](../../devtools.md#kx-monitoring) for kdb+ components into this Cloud Logging and Cloud Monitoring framework. The purpose is the same, to get insights into performance, uptime and overall health of the applications and the servers pool. You can visualize trends via dashboards and set rules to trigger alarms.
 
+Kx Insights Qlog provides kdb+ cloud logging functionality. Qlog supports multiple endpoint types through a simple interface and provides the ability to write to them concurrently. The logging endpoints in qlog are encoded as URLs with two main types: file descriptors and REST endpoints. The file descriptor endpoints supported are;
+-   :fd://stdout
+-   :fd://stderr
+-   :fd:///path/to/file.log
+
+REST endpoints are encoded as standard http/s URLs such as :https://logs.${region}.amazonaws.com. Qlog generates structured, formatted log messages tagged with a severity level and component name. Routing rules can also be configured to suppress or route based on these tags. 
+
+Existing q libraries that implement their own formatting can still use qlog via the base APIs. This enables them to do their own formatting but still take advantage of the qlog supported endpoints. Integration with cloud logging applications providers can easily be achieved using logging agents. These can be set up alongside running containers/virtual machines to capture their output and forward to logging endpoints, such as CloudWatch. 
+
+CloudWatch supports monitoring, alarming and creating dashboards. It is simple to create a Metric Filter based on a pattern and set an alarm (e.g. sending email) if a certain criterion holds. You may also wish to integrate your Kx monitoring for kdb+ components into this cloud logging and monitoring framework. The purpose is the same, to get insights into performance, uptime and overall health of the applications and the servers pool. You can visualize trends via dashboards.
+
+## Package, Manage and Deploy
+QPacker (qp) is a tool to help developers package, manage and deploy q/kdb+ applications to the cloud. It automates the creation of containers and virtual machines using a simple configuration file qp.json. It packages q/kdb+ applications with common shared code dependencies, such as python and C. QPacker can build and run containers locally as well as push to container registries (DockerHub, AWS Elastic Container Registry etc.).
+
+Software is often built by disparate teams, who may individually have remit over a particular component, and package that component for consumption by others. QPacker will store all artefacts for a project in a QPK file. While this file is intended for binary dependencies, it is also intended to be portable across environments.
+
+QPacker can interface with Hashicorp Packer to generate virtual machine (VM) images for AWS, GCP and Azure. These VM images can then be used as templates for a VM instance running in the cloud. When a cloud target is passed to QPacker (qp build -aws), an image is generated for each application defined in the top-level qp.json file. The QPK file resulting from each application is installed into the image and integrated with systemd to allow the startq.sh launch script to start the application on boot.
 
 ## Google Cloud Functions
 
@@ -396,6 +432,12 @@ One use case for Cloud Functions is implementing feed handlers. An upstream can 
 
 A similar service, called [Cloud Run](https://cloud.google.com/run), can be leveraged to run kdb+ in a serverless architecture. The kdb+ binary and code can be containerized and deployed to Cloud Run. Cloud Run then provisions the containers and manages the underlying infrastructure.
 
+## Cloud Map - Service Discovery
+Feeds and the RDB need to know the address of the tickerplant. The gateway and the RDB need to know the address of the HDB. In a microservice infrastructure like kdb+tick, these configuration details are best to be stored in a configuration management service. This is especially true if the addresses are constantly changing and new services are added dynamically.
+
+Service discovery can be managed from within kdb+ or using a service such as AWS Cloud Map. This service keeps track of all your application components, their locations, attributes and health status. Cloud Map organizes services into namespaces. A service must have an address and can have multiple attributes. You can add a health check to any service. A service is unhealthy if the number of times the health check failed is above a threshold. Set a higher threshold for HDBs if you allow long running queries.
+
+Kdb+ can easily interact with the AWS Cloud Map REST API using Kurl. Kurl can be extended to create/query namespaces, discover or register/deregister instances to facilitate service discovery of your kdb+ processes running in your tick environment. For example a kdb+ gateway can fetch from Cloud Map the addresses of healthy RDBs and HDBs. The aws console also comes with a simple web interface to visualize the status of your kdb+ processes/instances.
 
 ## Access management
 
