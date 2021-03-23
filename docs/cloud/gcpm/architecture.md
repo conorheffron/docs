@@ -238,7 +238,7 @@ It includes some other storage features such as: Deduplication, Compression, Sna
 
 This makes it more convenient than Google Cloud Persistent Disks. You can simply add HDB capacity by setting up a new VM, mounting Filestore High Scale SSD tier as if an NFS client to that service, and if needed, register the HDB to the HDB load balancer. RDB or any other data-writer processes can write HDB anytime, it just needs to notify the HDB processes to remap the HDB files to the backing store.
 
-We anticipate that you would deploy Filestore High Scale SSD tier as part of a tiered storage solution for your HDB. You may tier some data to local persistent disk or other Filestore tiers, including standard and premium tiers, or to object storage, according to the chosen deployment strategy.
+We anticipate that you would deploy Filestore High Scale SSD tier as part of a tiered storage solution for your HDB. You may tier some data to local SSD or other Filestore tiers, including standard and premium tiers, or to object storage, according to the chosen deployment strategy.
 
 Prior to choosing this technology, check in via your Google Cloud console to find the currently-supported regions for Filestore High Scale, as this is gradually being deployed globally.
 
