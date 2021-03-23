@@ -220,7 +220,7 @@ Persistent Disk's automatic encryption helps protect sensitive data at the lowes
 
 The limitation of Persistent Disks is that they can be mounted in read-write mode only to a single VM. When EOD [splaying](../../kb/splayed-tables.md) happens, the Persistent Disk needs to be unmounted from another VM, (i.e. all extra HDBs need to be shut down).
 
-Local Persistent Disk can be mounted to a single VM. They have higher throughput and lower latency (especially with NVMe interface) at the expense of functionality including redundancy and snapshots. Local Persistent Disk with write cache flushing disabled can be a great choice for TP logs. Mirrored HDBs for target groups like quants also require maximal speed and care less about redundancy and snapshots.
+Local SSD can be mounted to a single VM. They have higher throughput and lower latency (especially with NVMe interface) at the expense of functionality including redundancy and snapshots. Local SSD with write cache flushing disabled can be a great choice for TP logs. Mirrored HDBs for target groups like quants also require maximal speed and care less about redundancy and snapshots.
 
 When considering selecting the right Persistent Disk, one needs to be aware of the relation between maximal IOP and number of CPUs.
 
